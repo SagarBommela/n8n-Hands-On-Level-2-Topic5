@@ -161,17 +161,17 @@ Check that all 23 users are fetched and pagination stops when no users are retur
 
 Check that 23 users are processed in 5 batches.
 
-**Test 3: Error Handling**
-
-Check that User 13 fails due to an invalid email and other users continue processing.
-
 **Test 4: Wait Time**
 
 Check that the workflow waits 2 seconds between batches.
 
-**Test 5: Final Summary**
 
-Check that the final summary shows the correct results.
+GIT Url:
+https://github.com/SagarBommela/n8n-Hands-On-Level-2-Topic5
+
+Loom video:
+
+https://github.com/SagarBommela/n8n-Hands-On-Level-2-Topic5
 
 
 
