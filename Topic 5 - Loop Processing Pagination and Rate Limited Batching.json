@@ -1,0 +1,370 @@
+{
+  "name": "Topic 5 - Loop Processing Pagination and Rate Limited Batching",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -16
+      ],
+      "id": "2c239e97-7374-4681-bc19-8f0ae15e48af",
+      "name": "Manual_Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f45951cd-0257-4a7e-b52a-f6f76d4c1c17",
+              "name": "pageSize",
+              "value": "10",
+              "type": "number"
+            },
+            {
+              "id": "4e7e3361-c756-4b3e-b351-40303316a667",
+              "name": "batchSize",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "84bf9bac-5ef2-43cf-80a5-5168a87a8d1c",
+              "name": "waitSeconds",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "0a6ead6e-e56a-45fa-b1bd-1f759b5291d6",
+              "name": "maxPages",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        0,
+        -16
+      ],
+      "id": "bd63be4a-c90c-43ab-b7b2-73fde4ba8e55",
+      "name": "Set_Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n\nstaticData.accumulatedUsers = [];\nstaticData.currentPage = 1;\n\nreturn [{\n  json: {\n    currentPage: 1,\n    pageSize: $node['Set_Config'].json.pageSize || 10,\n    status: \"START_FETCH\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -16
+      ],
+      "id": "ffbfda97-c833-4e32-a761-6478200516ed",
+      "name": "Code_InitPaging"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.tayanasolutions.com/webhook/topic5/mock/api/users",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "page",
+              "value": "={{ $json.currentPage }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $node['Set_Config'].json.pageSize }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        -16
+      ],
+      "id": "1925b8f9-1990-4efd-b8e8-7f9ce207eee8",
+      "name": "HTTP_FetchPage"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "19e644cb-2949-49c0-b169-440adcd7efc9",
+              "leftValue": "={{ Array.isArray($json.items)   ? $json.items.length   : ($input.all().length > 0 ? 1 : 0) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        -16
+      ],
+      "id": "af1d2567-1f55-45ae-90e3-bc626ad62c53",
+      "name": "IF_HasMorePages"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst staticData = $getWorkflowStaticData('global');\n\n// Initialize values if they are undefined\nif (!Array.isArray(staticData.accumulatedUsers)) {\n  staticData.accumulatedUsers = [];\n}\n\nif (typeof staticData.currentPage !== 'number') {\n  staticData.currentPage = 1;\n}\n\n// Get API response\nconst inputData = $input.first().json;\n\nconst newItems = Array.isArray(inputData.items)\n  ? inputData.items\n  : $input.all().map(i => i.json);\n\n// Accumulate users\nstaticData.accumulatedUsers =\n  staticData.accumulatedUsers.concat(newItems);\n\n// Increment page\nstaticData.currentPage += 1;\n\n// Get maximum pages\nconst maxPages =\n  $node['Set_Config'].json.maxPages || 10;\n\nconst hasHitMax = staticData.currentPage > maxPages;\n\n// Return output\nreturn [{\n  json: {\n    currentPage: staticData.currentPage,\n    totalAccumulatedSoFar:\n      staticData.accumulatedUsers.length,\n    shouldContinue:\n      !hasHitMax && newItems.length > 0\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -80
+      ],
+      "id": "3991d636-4b9c-42ac-8e61-ea8b74bdc10e",
+      "name": "Code_AccumulatePage"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n\nconst users = staticData.accumulatedUsers || [];\n\nreturn users.map(user => ({\n  json: user\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "id": "6420a89a-ccf0-49aa-8389-438015ebf609",
+      "name": "Code_PrepareDataset",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "batchSize": "={{ $node['Set_Config'].json.batchSize || 5 }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        80
+      ],
+      "id": "6f9b2c89-58fd-4e59-bea2-51219fe36386",
+      "name": "Loop_Over_Items"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.tayanasolutions.com/webhook/topic5/mock/api/emails",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.email,\n  \"name\": $json.name,\n  \"subject\": \"Enterprise Operations Update\"\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1376,
+        224
+      ],
+      "id": "72f8c438-3a86-4a07-9142-161de71e572d",
+      "name": "HTTP_SendSimulatedEmail",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n\nconst isError =\n  item.error !== undefined ||\n  item.statusCode >= 400;\n\nreturn {\n  json: {\n    status: isError ? \"FAILED\" : \"SENT\",\n    email: $input.item.json.to ||\n      $node['Loop_Over_Items'].json.email,\n    processedAt: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        208
+      ],
+      "id": "aa4db219-aad2-4c6c-a2be-321c09d30606",
+      "name": "Code_ClassifyResult"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $node['Set_Config'].json.waitSeconds || 2 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1808,
+        208
+      ],
+      "id": "9d26fce6-9164-486d-89d0-d53f8d65f21a",
+      "name": "Wait_RateLimitPause",
+      "webhookId": "2f99866a-eab0-444d-8b8c-2a1d5554b839"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n\nconst totalUsers =\n  (staticData.accumulatedUsers || []).length;\n\nreturn [{\n  json: {\n    pipelineSummary: \"BATCH_PAGINATION_COMPLETE\",\n    totalPagesHarvested: staticData.currentPage - 1,\n    totalUsersProcessed: totalUsers,\n    completedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        64
+      ],
+      "id": "e1617e33-598e-478b-b219-d5c5f4afd8dc",
+      "name": "Code_BuildExecutionSummary"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set_Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Config": {
+      "main": [
+        [
+          {
+            "node": "Code_InitPaging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_InitPaging": {
+      "main": [
+        [
+          {
+            "node": "HTTP_FetchPage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_FetchPage": {
+      "main": [
+        [
+          {
+            "node": "IF_HasMorePages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_HasMorePages": {
+      "main": [
+        [
+          {
+            "node": "Code_AccumulatePage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code_PrepareDataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_AccumulatePage": {
+      "main": [
+        [
+          {
+            "node": "HTTP_FetchPage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_PrepareDataset": {
+      "main": [
+        [
+          {
+            "node": "Loop_Over_Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop_Over_Items": {
+      "main": [
+        [
+          {
+            "node": "Code_BuildExecutionSummary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP_SendSimulatedEmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_SendSimulatedEmail": {
+      "main": [
+        [
+          {
+            "node": "Code_ClassifyResult",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_ClassifyResult": {
+      "main": [
+        [
+          {
+            "node": "Wait_RateLimitPause",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "009b14dc-3123-4c18-93fc-5c23e85ef851",
+  "meta": {
+    "instanceId": "a03c7678428ef19ededbf912f16f7d5798ec7b9ab4c17f2a2def6a9e791e7215"
+  },
+  "nodeGroups": [],
+  "id": "G9YjddMfjOa16GFp",
+  "tags": []
+}
